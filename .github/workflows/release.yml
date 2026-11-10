@@ -1,0 +1,79 @@
+name: Release
+
+# v1.0.0 같은 태그를 push 하면 서명·공증된 DMG 를 GitHub Releases 에 올린다.
+# 필요한 저장소 Secrets (Settings → Secrets and variables → Actions):
+#   MACOS_CERTIFICATE_P12      Developer ID Application 인증서(.p12) base64
+#   MACOS_CERTIFICATE_PASSWORD 위 .p12 비밀번호
+#   SIGN_IDENTITY              "Developer ID Application: 이름 (TEAMID)"
+#   APPLE_ID / APPLE_TEAM_ID / APPLE_APP_PASSWORD   공증용 (앱 암호: appleid.apple.com)
+# Secrets 가 없으면 ad-hoc 서명 빌드를 사전 릴리스로 올린다.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version from tag
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then echo "${GITHUB_REF#refs/tags/v}" > VERSION; fi
+          echo "VERSION=$(cat VERSION)" >> "$GITHUB_ENV"
+
+      - name: Import signing certificate
+        id: signing
+        env:
+          P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          IDENTITY: ${{ secrets.SIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          if [[ -z "$P12" || -z "$IDENTITY" ]]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::서명 인증서가 없어 ad-hoc 빌드를 만듭니다."
+            exit 0
+          fi
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          security create-keychain -p ci "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p ci "$KEYCHAIN"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          if [[ -n "$APPLE_ID" && -n "$APP_PASSWORD" && -n "$TEAM_ID" ]]; then
+            xcrun notarytool store-credentials aipulse --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APP_PASSWORD" --keychain "$KEYCHAIN"
+            echo "NOTARY_PROFILE=aipulse" >> "$GITHUB_ENV"
+          fi
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: swift test
+
+      - name: Build, sign, notarize
+        run: UNIVERSAL=1 BUILD_NUMBER=${{ github.run_number }} ./Scripts/build-app.sh --dmg
+
+      - name: Smoke test
+        run: ./Scripts/smoke-test.sh build/AIPulse.app
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v$VERSION"
+          FLAGS=(--title "AI Pulse $VERSION" --generate-notes)
+          if [[ "${{ steps.signing.outputs.signed }}" != "true" ]]; then FLAGS+=(--prerelease); fi
+          cp build/AIPulse.mcpb "build/AIPulse-$VERSION.mcpb"
+          gh release create "$TAG" "build/AIPulse-$VERSION.dmg" "build/AIPulse-$VERSION.mcpb" "${FLAGS[@]}" \
+            || gh release upload "$TAG" "build/AIPulse-$VERSION.dmg" "build/AIPulse-$VERSION.mcpb" --clobber

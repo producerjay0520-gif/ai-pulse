@@ -1,0 +1,32 @@
+{
+  "manifest_version": "0.3",
+  "name": "ai-pulse",
+  "display_name": "AI Pulse",
+  "version": "__VERSION__",
+  "description": "Shows Claude's task progress, approval requests and completion in the AI Pulse menu bar app.",
+  "long_description": "AI Pulse is a macOS menu bar monitor for AI agents. This extension lets Claude report what it is working on (title, plan steps, status) so AI Pulse can show progress and notify you when Claude needs your input or finishes. Reports are written only to a local file on this Mac.",
+  "author": {
+    "name": "AI Pulse"
+  },
+  "icon": "icon.png",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/aipulse-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/server/aipulse-mcp",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [
+    {
+      "name": "report_status",
+      "description": "Report the current task's title, plan steps and status to the AI Pulse menu bar monitor."
+    }
+  ],
+  "keywords": ["status", "progress", "menu bar", "notifications"],
+  "license": "MIT",
+  "compatibility": {
+    "platforms": ["darwin"]
+  }
+}
