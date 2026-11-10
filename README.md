@@ -27,7 +27,9 @@ See what your AI agents are doing — right from the macOS menu bar.</p>
 ## 설치
 
 ### 다운로드
-[Releases](../../releases) 에서 `AIPulse-x.y.z.dmg` 를 받아 Applications 로 끌어다 놓습니다.
+1. [Releases](../../releases) 에서 `AIPulse-x.y.z.dmg` 를 받아 **AI Pulse** 를 Applications 로 끌어다 놓습니다.
+2. 현재 빌드는 Apple 개발자 서명 전이라 처음 열 때 경고가 뜹니다. Applications 에서 AI Pulse 를 **우클릭 → 열기 → 열기** 로 한 번 허용하세요. 경고 창에 '열기'가 없으면 시스템 설정 → 개인정보 보호 및 보안 → 아래쪽 **확인 없이 열기**.
+3. 첫 실행 안내 창에서 Claude Code · Codex · Claude 앱을 연결합니다.
 
 ### 직접 빌드
 Xcode 16 이상(또는 Swift 6 툴체인), macOS 14 이상.
